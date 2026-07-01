@@ -28,11 +28,9 @@ Sistem ada dua bahagian: **backend** (Google Apps Script + Sheets — pintu auth
 3. Kali pertama, Google akan minta kebenaran → **Review permissions → pilih akaun → Advanced → Go to (nama projek) → Allow**.
 4. Balik ke Sheets — sekarang dah ada 5 tab: `Pengguna`, `Sekolah`, `Projek`, `Log_Progress`, `Konfig`.
 
-> Skrip turut cipta **satu pentadbir JPN lalai**:
-> - Email: `admin@jpnkedah.gov.my`
-> - PIN: `123456`
+> Skrip turut cipta **12 akaun kongsi lalai** dalam tab `Pengguna` (1 Admin, 1 Pengguna JPN, 10 Pengguna PPD). Semua PIN lalai ialah **`123456`**.
 >
-> **Tukar PIN ni** selepas log masuk pertama (guna tindakan `tukarPin`), atau reset dari editor dengan `resetPin('admin@jpnkedah.gov.my','pinbaru')`.
+> **Tukar semua PIN ini** — edit terus kolum `pin` dalam tab `Pengguna` ikut setiap PPD.
 
 ## Langkah 4 — Deploy sebagai Web App
 
@@ -45,25 +43,29 @@ Sistem ada dua bahagian: **backend** (Google Apps Script + Sheets — pintu auth
 
 > Setiap kali ubah kod, kena **Deploy → Manage deployments → Edit (pensel) → Version: New version → Deploy**. Kalau buat "New deployment" tiap kali, URL akan berubah.
 
-## Langkah 5 — Isi data sekolah & daftar pegawai
+## Langkah 5 — Isi data sekolah & tetapkan PIN
 
 **Sekolah:** Isi terus dalam tab `Sekolah` (kolum: `kod_sekolah`, `nama`, `daerah`, `jenis`, `lokasi`, `peringkat`). Pastikan ejaan `daerah` sama macam dalam tab `Konfig`. Kolum `peringkat` ada dropdown Rendah/Menengah.
 
-**Pegawai PPD/JPN:** Cara mudah — daftar terus dari dalam sistem (modul **Urus Pengguna**, Pentadbir sahaja) selepas frontend siap. Atau dari editor Apps Script:
+**Akaun & PIN:** Sistem guna **model log masuk dropdown** — 12 akaun kongsi tetap dalam tab `Pengguna`. Cikgu cuma perlu **edit kolum `pin`** ikut setiap baris:
 
-```javascript
-tambahPengguna('Nama Pegawai', 'emel@jpnkedah.gov.my', 'PPD', 'Kubang Pasu', '778899');
-```
+| peranan | daerah | PIN |
+|---|---|---|
+| ADMIN | SEMUA | (pin admin) |
+| JPN | SEMUA | (pin pengguna JPN) |
+| PPD | Baling | (pin PPD Baling) |
+| PPD | Kota Setar | (pin PPD Kota Setar) |
+| … | … | … 10 PPD |
 
-Tiga peranan (`peranan`):
+Pengguna log masuk dengan pilih **Jenis Pengguna** (Admin / Pengguna JPN / Pengguna PPD) → pilih **PPD** (jika PPD) → masukkan **PIN**. Tiga peranan:
 
-| Nilai | Peranan | Akses | daerah |
-|---|---|---|---|
-| `ADMIN` | Pentadbir JPN | Tambah/edit projek semua daerah, urus kategori & pengguna | `SEMUA` |
-| `JPN` | Pegawai JPN | Pantau semua 10 PPD + dashboard (read-only) | `SEMUA` |
-| `PPD` | Pegawai PPD | Tambah/edit projek daerah sendiri | nama daerah |
+| Peranan | Akses |
+|---|---|
+| Admin | Tambah/edit projek semua daerah, urus kategori & PIN akaun |
+| Pengguna JPN | Pantau semua 10 PPD + dashboard (read-only) |
+| Pengguna PPD | Tambah/edit projek daerah sendiri sahaja |
 
-> **Nota:** akaun lalai `admin@jpnkedah.gov.my` (PIN `123456`) — tukar PIN selepas log masuk pertama melalui menu **Tukar PIN**.
+> **PIN disimpan sebagai teks biasa** dalam Sheet (mudah diurus). Sebab hanya pemilik Sheet ada akses, ia sesuai untuk kegunaan dalaman. Elakkan PIN bermula dengan `0`.
 
 ---
 
@@ -143,8 +145,8 @@ async function panggil(action, params = {}) {
   return res.json();
 }
 
-// Contoh log masuk
-const r = await panggil('login', { email: 'admin@jpnkedah.gov.my', pin: '123456' });
+// Contoh log masuk (Admin/JPN guna daerah 'SEMUA'; PPD guna nama daerah)
+const r = await panggil('login', { peranan: 'PPD', daerah: 'Baling', pin: '123456' });
 // r.token disimpan, dihantar pada setiap panggilan seterusnya
 ```
 
@@ -152,20 +154,19 @@ const r = await panggil('login', { email: 'admin@jpnkedah.gov.my', pin: '123456'
 
 | action | Siapa | Kegunaan |
 |---|---|---|
-| `login` | semua | `{email, pin}` → pulang `token` + info pengguna |
-| `tukarPin` | semua | `{email, pinLama, pinBaru}` |
+| `login` | semua | `{peranan, daerah, pin}` → pulang `token` + info pengguna |
+| `tukarPin` | berdaftar | `{token, pinLama, pinBaru}` |
 | `getKonfig` | berdaftar | senarai daerah, kategori, status, rmk untuk dropdown |
 | `getSekolah` | berdaftar | senarai sekolah (PPD: daerah sendiri sahaja) |
 | `getProjek` | berdaftar | `{token, filter:{daerah,rmk,rp,status,kategori}}` |
-| `tambahProjek` | **ADMIN + PPD** | `{token, data:{...}}` (Pegawai JPN tak boleh) |
-| `kemaskiniProjek` | **ADMIN + PPD** | `{token, id_projek, data:{...}}` (Pegawai JPN tak boleh) |
+| `tambahProjek` | **ADMIN + PPD** | `{token, data:{...}}` (Pengguna JPN tak boleh) |
+| `kemaskiniProjek` | **ADMIN + PPD** | `{token, id_projek, data:{...}}` (Pengguna JPN tak boleh) |
 | `getLogProgress` | berdaftar | `{token, id_projek}` → sejarah kemaskini |
 | `getDashboard` | berdaftar | `{token, filter:{rmk}}` → agregat untuk carta |
 | `tambahKategori` | **ADMIN sahaja** | `{token, kategori}` |
-| `senaraiPengguna` | **ADMIN sahaja** | senarai semua pengguna (tanpa PIN) |
-| `daftarPengguna` | **ADMIN sahaja** | `{token, data:{nama,email,peranan,daerah,pin}}` |
-| `kemaskiniPengguna` | **ADMIN sahaja** | `{token, data:{id,nama,peranan,daerah,aktif}}` |
-| `resetPinPengguna` | **ADMIN sahaja** | `{token, data:{id,pin}}` |
+| `senaraiPengguna` | **ADMIN sahaja** | senarai 12 akaun (tanpa PIN) |
+| `kemaskiniPengguna` | **ADMIN sahaja** | `{token, data:{peranan,daerah,aktif?,bukaKunci?}}` |
+| `resetPinPengguna` | **ADMIN sahaja** | `{token, data:{peranan,daerah,pin}}` |
 | `logout` | berdaftar | `{token}` |
 
 Setiap panggilan selepas login mesti sertakan `token`. Kalau token tamat tempoh, respons akan ada `sesiTamat: true` — frontend patut paksa log masuk semula.
@@ -185,51 +186,57 @@ Tetapan di atas boleh ubah dalam objek `TETAPAN` di bahagian atas `Code.gs`.
 
 ## Pengurusan PIN
 
-Sistem ada tiga senario PIN. Berikut cara kendali setiap satu.
+PIN disimpan sebagai teks biasa dalam tab `Pengguna`. Ada beberapa cara urus.
 
-### 1. Tukar PIN sendiri (semua pengguna)
+### 1. Cara paling mudah — edit terus di Sheet
 
-Setiap pegawai boleh tukar PIN sendiri bila-bila masa:
+Buka tab `Pengguna`, cari baris akaun (ikut `peranan` + `daerah`), edit kolum `pin`. Selesai — terus berkuat kuasa.
 
-1. Log masuk ke sistem.
-2. Klik tab **Tukar PIN**.
-3. Masukkan **PIN semasa**, kemudian **PIN baru** (minimum 6 digit) dan sahkan.
-4. Klik **Tukar PIN**. Siap — PIN baru terus berkuat kuasa.
+### 2. Tukar PIN dari dalam app (semua pengguna)
 
-Galakkan semua pegawai tukar PIN lalai pada kali pertama log masuk.
+1. Log masuk → tab **Tukar PIN**.
+2. Masukkan **PIN semasa**, **PIN baru** (min. 6 digit), sahkan → **Tukar PIN**.
 
-### 2. Reset PIN pegawai (Pentadbir JPN)
+> Nota: akaun dikongsi satu pejabat — menukar PIN mengubahnya untuk seluruh pejabat/daerah tersebut.
 
-Bila pegawai lupa PIN atau akaun dikunci, Pentadbir boleh reset tanpa perlu tahu PIN lama:
+### 3. Set PIN / buka kunci (Pentadbir)
 
-1. Log masuk sebagai Pentadbir → tab **Urus Pengguna**.
-2. Cari pegawai berkenaan → klik **Reset PIN**.
-3. Masukkan PIN baru (minimum 6 digit) → **Reset PIN**.
-4. Maklumkan PIN baru kepada pegawai (mereka boleh tukar sendiri selepas itu).
+1. Log masuk sebagai Admin → tab **Urus Pengguna**.
+2. Untuk mana-mana akaun: klik **Set PIN** (tetapkan PIN baru), **Buka Kunci** (jika dikunci), atau **Aktif/Nyahaktif**.
 
-Reset PIN juga **buka kunci** akaun secara automatik (kaunter cubaan gagal & tempoh lockout dikosongkan).
+Set PIN juga membuka kunci akaun secara automatik.
 
-### 3. Pemulihan kecemasan — Pentadbir terkunci / lupa PIN
+### 4. Pemulihan kecemasan — Admin terkunci / lupa PIN
 
-Kalau Pentadbir sendiri tak boleh log masuk (lupa PIN, atau dikunci) dan **tiada Pentadbir lain** untuk reset, gunakan editor Apps Script:
+Kalau akaun Admin tak boleh log masuk, edit terus kolum `pin` baris **ADMIN / SEMUA** dalam tab `Pengguna`, dan kosongkan kolum `masa_lockout` + `cubaan_gagal`. Atau dari editor Apps Script:
 
-1. Buka Google Sheets → **Extensions → Apps Script**.
-2. Pada dropdown fungsi, pilih **`resetPin`**. Tapi fungsi ini perlukan argumen, jadi lebih mudah tampal baris ini di hujung kod, save, dan Run sekali:
-   ```javascript
-   function pulihAdmin() {
-     resetPin('admin@jpnkedah.gov.my', '654321');  // tukar PIN ikut kehendak
-   }
-   ```
-3. Pilih **`pulihAdmin`** → **Run**. PIN admin kini `654321` dan akaun terbuka.
-4. Log masuk, kemudian tukar kepada PIN sebenar melalui tab **Tukar PIN**. Padam fungsi `pulihAdmin` selepas selesai.
+```javascript
+function pulihAdmin() {
+  resetPin('ADMIN', 'SEMUA', '654321');  // tukar PIN ikut kehendak
+}
+```
 
-> Editor Apps Script hanya boleh diakses oleh pemilik Google Sheets — jadi laluan kecemasan ni selamat.
+Pilih **`pulihAdmin`** → **Run**. PIN admin kini `654321` dan akaun terbuka. Padam fungsi ni selepas selesai.
+
+> Editor Apps Script & Sheet hanya boleh diakses oleh pemilik — jadi laluan kecemasan ni selamat.
 
 ### Nota tentang kunci akaun (lockout)
 
 - Selepas **5 cubaan PIN salah**, akaun dikunci **15 minit**.
-- Lockout terbuka sendiri selepas 15 minit, atau serta-merta apabila Pentadbir buat **Reset PIN**.
+- Lockout terbuka sendiri selepas 15 minit, atau serta-merta apabila Admin **Set PIN** / **Buka Kunci**.
 - Nilai ini boleh diubah dalam objek `TETAPAN` (`MAX_CUBAAN`, `LOCKOUT_MINIT`) di `Code.gs`.
+
+---
+
+## Bertukar dari versi lama (model emel)
+
+Kalau Cikgu dah jalankan versi lama (login guna emel), tab `Pengguna` masih struktur lama. Jalankan sekali dari editor untuk bina semula kepada model 12 akaun:
+
+1. Tampal `Code.gs` terkini, save.
+2. Pilih fungsi **`binaSemulaAkaun`** → **Run**.
+3. Tab `Pengguna` dibina semula: 12 akaun, PIN lalai `123456`. Kemudian set PIN sebenar.
+
+> **Amaran:** `binaSemulaAkaun()` gantikan semua baris dalam tab `Pengguna`.
 
 ---
 
